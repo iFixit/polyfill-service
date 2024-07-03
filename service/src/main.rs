@@ -8,9 +8,9 @@ mod pages;
 mod polyfill;
 
 use crate::polyfill::polyfill;
-use fastly::http::{header, Method, StatusCode};
+use fastly::http::{header, Method, StatusCode, Url};
 use fastly::{Request, Response, SecretStore};
-use pages::{home, privacy, terms};
+use pages::{home};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::Read;
@@ -109,6 +109,18 @@ fn stats() -> Option<Stats> {
     }
 }
 
+fn base_url(url: &Url) -> String {
+    let host = url.host_str().expect("url should always have a host");
+    match url.port() {
+        Some(port) => {
+            format!("{}://{}:{}", url.scheme(), host, &port)
+        }
+        None => {
+            format!("{}://{}", url.scheme(), host)
+        }
+    }
+}
+
 fn main() {
     fastly::init();
     RequestLimits::set_max_header_value_bytes(Some(15_000));
@@ -119,6 +131,7 @@ fn main() {
     //     std::env::var("FASTLY_SERVICE_VERSION").unwrap_or_else(|_| String::new())
     // );
     let url = req.get_url_str().to_owned();
+    let base = base_url(req.get_url());
     // println!("url: {}", url);
     std::panic::set_hook(Box::new(move |info| {
         eprintln!(
@@ -158,7 +171,7 @@ fn main() {
             // .with_header("Location", "/v3/")
             // .with_header("Cache-Control", "public, s-maxage=31536000, max-age=604800, stale-while-revalidate=604800, stale-if-error=604800, immutable").send_to_client();
 
-            Response::from_body(home(stats(), DAYS))
+            Response::from_body(home(base, stats(), DAYS))
                 .with_content_type(fastly::mime::TEXT_HTML_UTF_8)
                 .with_header("x-compress-hint", "on")
                 // Enables the cross-site scripting filter built into most modern web browsers.
@@ -176,33 +189,18 @@ fn main() {
                 )
                 .send_to_client();
         }
-        "/img/logo.svg" => {
-            Response::from_body(include_str!("logo.svg"))
+        "/img/fastly.svg" => {
+            Response::from_body(include_str!("fastly.svg"))
                 .with_content_type(fastly::mime::IMAGE_SVG)
                 .with_header("x-compress-hint", "on")
                 .with_header("surrogate-key", "website")
                 .send_to_client();
         }
-        "/v3/terms" => {
-            Response::from_body(terms())
-                .with_content_type(fastly::mime::TEXT_HTML_UTF_8)
+        "/img/fastly-favicon.svg" => {
+            Response::from_body(include_str!("fastly-favicon.svg"))
+                .with_content_type(fastly::mime::IMAGE_SVG)
                 .with_header("x-compress-hint", "on")
                 .with_header("surrogate-key", "website")
-                .with_header(
-                    "Cache-Control",
-                    "max-age=86400, stale-while-revalidate=86400, stale-if-error=86400",
-                )
-                .send_to_client();
-        }
-        "/v3/privacy-policy" => {
-            Response::from_body(privacy())
-                .with_content_type(fastly::mime::TEXT_HTML_UTF_8)
-                .with_header("x-compress-hint", "on")
-                .with_header("surrogate-key", "website")
-                .with_header(
-                    "Cache-Control",
-                    "max-age=86400, stale-while-revalidate=86400, stale-if-error=86400",
-                )
                 .send_to_client();
         }
         "/robots.txt" => {
